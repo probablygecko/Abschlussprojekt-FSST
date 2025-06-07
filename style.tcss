@@ -1,0 +1,43 @@
+Screen {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    layout: horizontal;
+    overflow: hidden;
+}
+#user_list {
+    width: 20%;
+    border: solid white;
+    background: #181825;
+    padding: 1;
+}
+ListView > ListItem {
+    padding: 0 1;
+    height: 2;
+}
+ListView > ListItem.--selected {
+    background: #585b70;
+    color: #f38ba8;
+    text-style: bold;
+}
+#chat_container {
+    width: 80%;
+    border: solid #313244;
+    background: #181825;
+    padding: 1 2;
+    layout: vertical;
+}
+#chat_display {
+    height: 1fr;
+    border: solid white;
+    padding: 1 2;
+    overflow-y: auto;
+}
+#chat_input {
+    height: 3;
+    border: solid #313244;
+    background: #11111b;
+    color: #cdd6f4;
+}
+#chat_input:focus {
+    border: heavy white;
+}
