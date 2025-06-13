@@ -2,11 +2,11 @@ from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import ListView, ListItem, Static, Input
 from rich.text import Text
-from telethon import TelegramClient
+from telethon import TelegramClient, events
 import re, os, json
 
-def login(id, hash):
-    client = TelegramClient('session_name', id, hash)
+def login(api_id, api_hash):
+    client = TelegramClient('session_name', api_id, api_hash)
     client.start()
     return client
 
@@ -14,16 +14,15 @@ api_id = input("Please enter your API id: ")
 api_hash = input("Please enter your API hash: ")
 
 if os.path.isfile("session_name.session"):
-    with open("credentials.json","r") as f:
+    with open("credentials.json", "r") as f:
         c = json.load(f)
-
-    id = c.get("api_id")
-    hash = c.get("api_hash")
-    client = login(id, hash)
+    api_id = c.get("api_id")
+    api_hash = c.get("api_hash")
+    client = login(api_id, api_hash)
 else:
     client = login(api_id, api_hash)
 
-if api_id and api_hash:    
+if api_id and api_hash:
     data = {"api_id": api_id, "api_hash": api_hash}
     with open("credentials.json", "w") as f:
         json.dump(data, f)
@@ -45,7 +44,7 @@ async def getMessages(user, chat_view):
         if message.text is None:
             continue
         if message.out:
-            texts.append(f"{me.username}: {message.text}")
+            texts.append(f"{me.username or 'You'}: {message.text}")
         else:
             sender = message.sender
             if not sender:
@@ -57,8 +56,7 @@ async def getMessages(user, chat_view):
             else:
                 name = "User"
             texts.append(f"{name}: {message.text}")
-
-    chat_view.display_messages(texts)
+    chat_view.display_messages(texts[::-1])  # newest last
 
 class UserList(ListView):
     def __init__(self, users, **kwargs):
@@ -81,10 +79,13 @@ class ChatView(Static):
         self.update(text)
 
 class TelegramTUI(App):
-    CSS = "style.tcss"
+    CSS_PATH = "style.tcss"
 
     users = []
     uids = []
+    selected_uid = None
+    selected_user = None
+    app_instance = None
 
     def compose(self) -> ComposeResult:
         yield UserList(self.users, id="user_list")
@@ -93,6 +94,7 @@ class TelegramTUI(App):
             yield Input(placeholder="Message: ", id="chat_input")
 
     async def on_mount(self):
+        TelegramTUI.app_instance = self
         getchat = await getChats()
         self.users = [i[0] for i in getchat]
         self.uids = [i[1] for i in getchat]
@@ -118,23 +120,25 @@ class TelegramTUI(App):
     async def on_list_view_selected(self, event: ListView.Selected):
         selected = event.item.query_one(Static).renderable
         self.selected_user = str(selected)
-
         idx = self.users.index(self.selected_user)
         self.selected_uid = self.uids[idx]
-
         await self.load_messages_for_selected_user()
 
     async def on_input_submitted(self, event: Input.Submitted):
         message = event.value.strip()
         if not message:
             return
-            
-        await client.send_message(self.selected_uid, message)
-        
-        chat_view = self.query_one("#chat_display", ChatView)
-        chat_view.messages.append(f"You: {message}")
-        chat_view.display_messages(chat_view.messages)
 
+        await client.send_message(self.selected_uid, message)
         event.input.value = ""
+
+        await self.load_messages_for_selected_user()
+
+@client.on(events.NewMessage(func=lambda e: True))
+async def handler(event):
+    app = TelegramTUI.app_instance
+    if app and hasattr(app, 'selected_uid') and event.chat_id == app.selected_uid:
+        chat_view = app.query_one("#chat_display", ChatView)
+        await getMessages(app.selected_uid, chat_view)
 
 TelegramTUI().run()
